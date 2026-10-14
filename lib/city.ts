@@ -11,11 +11,11 @@ export interface Venue {
 
 /** Editorial demo venues; these names and locations are illustrative. */
 export const VENUES: Venue[] = [
-  { id: "lumen", name: "Lumen", category: "Modern dining", neighborhood: "SoHo", coordinates: [-73.9987, 40.7247], label: "DINNER, REIMAGINED" },
-  { id: "vesper", name: "Vesper", category: "Cocktail bar", neighborhood: "Lower East Side", coordinates: [-73.9917, 40.7215], label: "ONE MORE ROUND" },
-  { id: "marea", name: "Marea", category: "Coastal kitchen", neighborhood: "Nolita", coordinates: [-73.9952, 40.7233], label: "A LITTLE ESCAPE" },
-  { id: "atlas", name: "Atlas", category: "Rooftop & late nights", neighborhood: "Tribeca", coordinates: [-74.006, 40.7197], label: "ABOVE THE ORDINARY" },
-  { id: "sotto", name: "Sotto", category: "Wine & small plates", neighborhood: "East Village", coordinates: [-73.9892, 40.7277], label: "STAY A LITTLE LONGER" },
+  { id: "lumen", name: "Lumen", category: "Современная кухня", neighborhood: "Сохо", coordinates: [-73.9987, 40.7247], label: "УЖИН В НОВОМ ФОРМАТЕ" },
+  { id: "vesper", name: "Vesper", category: "Коктейльный бар", neighborhood: "Нижний Ист-Сайд", coordinates: [-73.9917, 40.7215], label: "ПО БОКАЛУ?" },
+  { id: "marea", name: "Marea", category: "Морская кухня", neighborhood: "Нолита", coordinates: [-73.9952, 40.7233], label: "МОРСКАЯ КУХНЯ" },
+  { id: "atlas", name: "Atlas", category: "Ресторан на крыше", neighborhood: "Трайбека", coordinates: [-74.006, 40.7197], label: "НАД ГОРОДОМ" },
+  { id: "sotto", name: "Sotto", category: "Вино и закуски", neighborhood: "Ист-Виллидж", coordinates: [-73.9892, 40.7277], label: "ВИНО И РАЗГОВОРЫ" },
 ];
 
 export interface CityCamera {

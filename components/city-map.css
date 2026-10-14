@@ -1,5 +1,10 @@
 .city-map { position: fixed; inset: 0; overflow: hidden; z-index: 0; background: #0b111b; pointer-events: none; isolation: isolate; }
 .city-map__canvas { position: absolute; inset: 0; opacity: 0; transition: opacity 1.4s ease; }
+.city-map__canvas{width:calc(100% / var(--city-render-scale,1));height:calc(100% / var(--city-render-scale,1));transform:scale(var(--city-render-scale,1));transform-origin:top left}
+.city-venue-marker__ui{display:grid;place-items:center;position:relative;width:28px;height:28px;transform:scale(calc(1 / var(--city-render-scale,1)));transform-origin:center}
+.city-map__canvas .mapboxgl-ctrl-bottom-left,.city-map__canvas .mapboxgl-ctrl-bottom-right{scale:calc(1 / var(--city-render-scale,1))}
+.city-map__canvas .mapboxgl-ctrl-bottom-left{transform-origin:bottom left}
+.city-map__canvas .mapboxgl-ctrl-bottom-right{transform-origin:bottom right}
 .city-map[data-map-status="ready"] .city-map__canvas { opacity: 1; }
 .city-map__fallback { position: absolute; inset: -9%; opacity: 1; transition: opacity 1.8s ease; background: radial-gradient(ellipse at 73% 44%, #172431 0, #0b131d 44%, #060b13 100%); }
 .city-map[data-map-status="ready"] .city-map__fallback { opacity: 0; }

@@ -1,23 +1,29 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import type { GeoJSONSource, Map as MapboxMap, Marker } from "mapbox-gl";
+import type { ExpressionSpecification, Map as MapboxMap, Marker } from "mapbox-gl";
 import { CAMERA_STOPS, CITY_ROUTES, VENUES, cameraAt, partialLine } from "../lib/city";
 import "mapbox-gl/dist/mapbox-gl.css";
 import "./city-map.css";
+import type { ScrollStateRef } from "../lib/scroll-state";
 
 type Props = {
-  progress: number;
-  activeChapter: number;
+  motion: ScrollStateRef;
+  registerRenderer: (draw: () => void) => () => void;
   selectedVenue: string;
   onVenueSelect: (id: string) => void;
-  motionPaused?: boolean;
 };
 type MapStatus = "loading" | "ready" | "offline";
 type LineCollection = {
   type: "FeatureCollection";
   features: { type: "Feature"; properties: Record<string, number>; geometry: { type: "LineString"; coordinates: number[][] } }[];
 };
+
+
+function revealGradient(fraction: number, color: string): ExpressionSpecification {
+  if(fraction>=1)return ['interpolate',['linear'],['line-progress'],0,color,1,color];
+  return ['step',['line-progress'],fraction<=0?'rgba(0,0,0,0)':color,Math.max(.0001,fraction),'rgba(0,0,0,0)'];
+}
 
 function selectionOffset(progress: number, selectedVenue: string): [number, number] {
   const selected = VENUES.find(venue => venue.id === selectedVenue) || VENUES[0];
@@ -87,7 +93,8 @@ function installCityLayers(map: MapboxMap, mobile: boolean) {
       map.setPaintProperty(id, "line-opacity", /case/.test(id) ? .9 : .48);
     }
   }
-  map.setLight({ anchor: "viewport", color: "#cfdfed", intensity: .6, position: [1.5, 135, 48] });
+  map.setLight({ anchor: "viewport", color: "#d7e4f2", intensity: .65, position: [1.5, 155, 48] });
+  map.setFog({ range: [.6, 7], color: '#101a28', 'high-color': '#101a28', 'space-color': '#090e14', 'horizon-blend': .12 });
   const firstLabel = (style.layers || []).find(layer => layer.type === "symbol")?.id;
   if (map.getSource("composite")) {
     map.addLayer({
@@ -96,33 +103,45 @@ function installCityLayers(map: MapboxMap, mobile: boolean) {
       paint: {
         "fill-extrusion-color": ["interpolate", ["linear"], ["coalesce", ["get", "height"], 12], 0, "#2a3743", 40, "#35424f", 130, "#455362", 250, "#536477"],
         "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 13.5, 0, 14.3, ["*", ["max", 12, ["coalesce", ["get", "height"], 12]], mobile ? 1 : 1.2]],
-        "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0], "fill-extrusion-opacity": .98, "fill-extrusion-vertical-gradient": true,
+        "fill-extrusion-base": ["coalesce", ["get", "min_height"], 0], "fill-extrusion-opacity": 1, "fill-extrusion-vertical-gradient": true,
       },
     }, firstLabel);
   }
   map.addSource("hostess-district", { type: "geojson", data: DISTRICT });
   map.addLayer({ id: "hostess-district-fill", type: "fill", source: "hostess-district", paint: { "fill-color": "#c69b62", "fill-opacity": .028 } }, map.getLayer("hostess-buildings") ? "hostess-buildings" : firstLabel);
   map.addLayer({ id: "hostess-district-edge", type: "line", source: "hostess-district", paint: { "line-color": "#dcb17d", "line-opacity": .18, "line-width": .8, "line-dasharray": [2, 4] } });
-  map.addSource("hostess-routes", { type: "geojson", data: routeData(0), lineMetrics: true });
-  map.addLayer({ id: "hostess-routes-glow", type: "line", source: "hostess-routes", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-color": "#f4b660", "line-width": mobile ? 7 : 13, "line-opacity": .23, "line-blur": 5 } });
+  map.addSource("hostess-routes", { type: "geojson", data: routeData(2), lineMetrics: true });
+  map.addLayer({ id: "hostess-routes-glow", type: "line", source: "hostess-routes", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-gradient": revealGradient(0,"#f4b660"), "line-width": mobile ? 7 : 13, "line-opacity": .19, "line-blur": 3 } });
   map.addLayer({ id: "hostess-routes-light", type: "line", source: "hostess-routes", layout: { "line-join": "round", "line-cap": "round" }, paint: { "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, "#ffd395", .8, "#ddb074", 1, "#fff2d6"], "line-width": mobile ? 1.5 : 2.2, "line-opacity": .9 } });
-  map.addSource("hostess-network", { type: "geojson", data: networkData(0), lineMetrics: true });
-  map.addLayer({ id: "hostess-network-glow", type: "line", source: "hostess-network", layout: { "line-cap": "round" }, paint: { "line-color": "#729bef", "line-width": 7, "line-blur": 3, "line-opacity": 0, "line-occlusion-opacity": .55 } });
-  map.addLayer({ id: "hostess-network-light", type: "line", source: "hostess-network", layout: { "line-cap": "round" }, paint: { "line-color": "#9dbfff", "line-width": 1.6, "line-dasharray": [3, 3], "line-opacity": 0, "line-occlusion-opacity": .7, "line-emissive-strength": .85 } });
+  map.addSource("hostess-network", { type: "geojson", data: networkData(1), lineMetrics: true });
+  map.addLayer({ id: "hostess-network-glow", type: "line", source: "hostess-network", layout: { "line-cap": "round" }, paint: { "line-gradient": revealGradient(0,"#729bef"), "line-width": 7, "line-blur": 3, "line-opacity": 0, "line-occlusion-opacity": .55 } });
+  map.addLayer({ id: "hostess-network-light", type: "line", source: "hostess-network", layout: { "line-cap": "round" }, paint: { "line-gradient": revealGradient(0,"#9dbfff"), "line-width": 1.6, "line-opacity": 0, "line-occlusion-opacity": .7, "line-emissive-strength": .85 } });
+  // Five small native meshes highlight venues without a second WebGL renderer.
+  map.addSource('hostess-places', {type:'geojson', data:{type:'FeatureCollection',features:VENUES.map((venue,index)=>{
+    const ring=(radius:number)=>Array.from({length:25},(_,i)=>{const angle=i/24*Math.PI*2;return [venue.coordinates[0]+Math.cos(angle)*radius,venue.coordinates[1]+Math.sin(angle)*radius*.76];});
+    return {type:'Feature',id:index,properties:{},geometry:{type:'Polygon',coordinates:[ring(.00017),ring(.00012).reverse()]}};
+  })}});
+  map.addLayer({id:'hostess-place-crowns',type:'fill-extrusion',source:'hostess-places',paint:{
+    'fill-extrusion-height':['case',['boolean',['feature-state','active'],false],65,22],
+    'fill-extrusion-base':12,'fill-extrusion-opacity':.72,
+    'fill-extrusion-color':['case',['boolean',['feature-state','network'],false],'#8eb8f6','#e2ad6c'],
+    'fill-extrusion-emissive-strength':.55,'fill-extrusion-vertical-gradient':true,
+  }});
 }
 
 function markerElement(venue: typeof VENUES[number], select: (id: string) => void) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "city-venue-marker";
-  button.setAttribute("aria-label", `Explore ${venue.name}, ${venue.category}`);
+  button.setAttribute("aria-label", `Выбрать ${venue.name}, ${venue.category}`);
   button.dataset.venue = venue.id;
   const dot = document.createElement("span"); dot.className = "city-venue-marker__dot";
   const stem = document.createElement("span"); stem.className = "city-venue-marker__stem";
   const label = document.createElement("span"); label.className = "city-venue-marker__label";
   const name = document.createElement("b"); name.textContent = venue.name;
   const category = document.createElement("small"); category.textContent = venue.category;
-  label.append(name, category); button.append(dot, stem, label);
+  const ui=document.createElement('span');ui.className='city-venue-marker__ui';
+  label.append(name, category);ui.append(dot,stem,label);button.append(ui);
   button.addEventListener("click", () => select(venue.id));
   return button;
 }
@@ -159,181 +178,187 @@ const CityDrawing = memo(function CityDrawing() {
       <path d={`M${x},${y - h}l25,13 22,-12 -25,-13Z`} fill={["#3c4b59", "#455360", "#303e4b"][tone]} stroke="#65717b" strokeOpacity=".24" strokeWidth=".6"/>
       {Array.from({ length: Math.floor(h / 14) }, (_, floor) => <path key={floor} d={`M${x + 4},${y - floor * 14 - 6}l15,8m12,1 12,-6`} stroke={lit ? "#d3ac73" : "#65788a"} strokeWidth="1" opacity={lit ? .52 : .2}/>) }
     </g>)}</g>
-    <g fill="#d5aa73" opacity=".55" fontFamily="monospace" fontSize="11" letterSpacing="5"><text x="907" y="687" transform="rotate(-28 907 687)">SOHO</text><text x="1157" y="359" transform="rotate(28 1157 359)">NOLITA</text><text x="558" y="539" transform="rotate(-28 558 539)">TRIBECA</text></g>
+    <g fill="#d5aa73" opacity=".55" fontFamily="monospace" fontSize="11" letterSpacing="5"><text x="907" y="687" transform="rotate(-28 907 687)">СОХО</text><text x="1157" y="359" transform="rotate(28 1157 359)">НОЛИТА</text><text x="558" y="539" transform="rotate(-28 558 539)">ТРАЙБЕКА</text></g>
     <path d="M710 254q365-120 667 265M551 397q489-18 578 334" fill="none" stroke="#7ca4e1" strokeWidth="1" opacity=".26" strokeDasharray="3 7"/>
   </svg>;
 });
 
 const FALLBACK_POINTS = [{ x: 64, y: 46 }, { x: 84, y: 56 }, { x: 73, y: 36 }, { x: 54, y: 65 }, { x: 86, y: 31 }];
 
-export default function CityMap({ progress, activeChapter, selectedVenue, onVenueSelect, motionPaused = false }: Props) {
+export default function CityMap({ motion, registerRenderer, selectedVenue, onVenueSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapboxMap | null>(null);
-  const markersRef = useRef<Marker[]>([]);
-  const latestRef = useRef({ progress, activeChapter, selectedVenue, onVenueSelect, motionPaused });
-  const [status, setStatus] = useState<MapStatus>("loading");
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    latestRef.current = { progress, activeChapter, selectedVenue, onVenueSelect, motionPaused };
-  }, [progress, activeChapter, selectedVenue, onVenueSelect, motionPaused]);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fallbackRef = useRef<HTMLDivElement>(null);
+  const latestRef = useRef({ selectedVenue, onVenueSelect });
+  const scheduler = useRef<(() => void) | undefined>(undefined);
+  const [status, setStatus] = useState<MapStatus>('loading');
+  const [fallbackLeaving, setFallbackLeaving] = useState(true);
 
   useEffect(() => {
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(preference.matches);
-    update(); preference.addEventListener("change", update);
-    return () => preference.removeEventListener("change", update);
-  }, []);
+    latestRef.current = { selectedVenue, onVenueSelect };
+    scheduler.current?.();
+  }, [selectedVenue, onVenueSelect, motion]);
 
   useEffect(() => {
-    let disposed = false, frame = 0, timeout = 0, failures = 0;
-    let currentProgress = latestRef.current.progress, lastTime = 0, lastRouteStep = -1, lastNetwork = -1;
-    let currentFocus: [number, number] = [0, 0];
-    let lastWidth = 0, lastHeight = 0;
-    const mobile = window.innerWidth < 768;
-    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (status !== 'ready') return;
+    const timer = setTimeout(() => setFallbackLeaving(false), 1200);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  useEffect(() => {
+    let disposed = false, frame = 0, timeout = 0, map: MapboxMap | null = null, loaded = false;
+    let lastTime = 0, cameraFrames = 0, routeReveal = -1, networkReveal = -1, markerMode = '', lastSelected = '';
+    let lastCamera = '', chapter = -1;
+    let focus: [number, number] = [0, 0];
+    let size = { width: window.innerWidth, height: window.innerHeight };
+    const markers: Marker[] = [];
+    const initialMobile = size.width < 768;
+    // Background-only render scaling caps high-DPI GPU work. HTML text stays sharp.
+    const renderScale = Math.max(1.16, Math.min(2.2, window.devicePixelRatio / 1.4));
+    rootRef.current?.style.setProperty('--city-render-scale', String(renderScale));
+    const params = new URLSearchParams(window.location.search);
+    const benchmark = params.has('bench');
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    const illustratedPreview = new URLSearchParams(window.location.search).get('city') === 'illustrated';
-    const updateMarkers = () => markersRef.current.forEach(marker => {
-      const el = marker.getElement();
-      el.dataset.selected = String(el.dataset.venue === latestRef.current.selectedVenue);
-      el.dataset.network = String(latestRef.current.progress > 3.4 && latestRef.current.progress < 5.3);
-      el.setAttribute('aria-pressed', el.dataset.selected);
-      el.setAttribute('role', 'button');
-    });
-    const initialise = async () => {
-      if (!token || !containerRef.current || illustratedPreview) { setStatus("offline"); return; }
-      try {
-        const mapbox = (await import("mapbox-gl")).default;
-        if (disposed) return;
-        if (!mapbox.supported()) { setStatus("offline"); return; }
-        const initial = cameraAt(currentProgress);
-        const map = new mapbox.Map({
-          container: containerRef.current!, accessToken: token, style: "mapbox://styles/mapbox/dark-v11",
-          center: initial.center, zoom: initial.zoom - (mobile ? .45 : 0), pitch: mobile ? 50 : initial.pitch,
-          bearing: initial.bearing, interactive: false, attributionControl: false, antialias: !mobile,
-          maxTileCacheSize: mobile ? 70 : 160, fadeDuration: 0, logoPosition: "bottom-left",
-          renderWorldCopies: false, localFontFamily: "Arial", collectResourceTiming: false,
-        });
-        mapRef.current = map;
-        map.addControl(new mapbox.AttributionControl({ compact: true }), "bottom-right");
-        timeout = window.setTimeout(() => { if (!disposed && !map.isStyleLoaded()) setStatus("offline"); }, 15000);
-        map.on("error", event => {
-          failures++;
-          const message = event.error?.message || "";
-          if (!disposed && (/401|403|access token|Unauthorized|Forbidden/i.test(message) || failures > 5)) setStatus("offline");
-        });
-        const canvas = map.getCanvas();
-        canvas.setAttribute("aria-label", "Cinematic 3D map of Manhattan; illustrative Hostess venues");
-        canvas.setAttribute("role", "img");
-        const lost = (event: Event) => { event.preventDefault(); if (!disposed) setStatus("offline"); };
-        const restored = () => { if (!disposed) setStatus("ready"); };
-        canvas.addEventListener("webglcontextlost", lost);
-        canvas.addEventListener("webglcontextrestored", restored);
-        map.once("load", () => {
-          if (disposed) return;
-          clearTimeout(timeout); failures = 0;
-          try { installCityLayers(map, mobile); }
-          catch { setStatus("offline"); return; }
-          markersRef.current = VENUES.map(venue => new mapbox.Marker({
-            element: markerElement(venue, id => latestRef.current.onVenueSelect(id)), anchor: "center",
-            pitchAlignment: "viewport", rotationAlignment: "viewport", occludedOpacity: .5,
-          }).setLngLat(venue.coordinates).addTo(map));
-          updateMarkers(); setStatus("ready");
-          const animate = (time: number) => {
-            if (disposed) return;
-            frame = window.requestAnimationFrame(animate);
-            const width = containerRef.current?.clientWidth || window.innerWidth;
-            const height = containerRef.current?.clientHeight || window.innerHeight;
-            const isMobile = width < 768;
-            if (document.visibilityState === "hidden" || time - lastTime < (isMobile ? 42 : 30)) return;
-            lastTime = time;
-            const latest = latestRef.current;
-            const motionReduced = motionQuery.matches || latest.motionPaused;
-            const target = motionReduced ? latest.activeChapter : latest.progress;
-            const previous = currentProgress;
-            currentProgress = motionReduced ? target : previous + (target - previous) * .16;
-            const targetFocus = selectionOffset(currentProgress, latest.selectedVenue);
-            const focusMoving = Math.abs(targetFocus[0] - currentFocus[0]) + Math.abs(targetFocus[1] - currentFocus[1]) > .000001;
-            currentFocus = motionReduced ? targetFocus : [currentFocus[0] + (targetFocus[0] - currentFocus[0]) * .12, currentFocus[1] + (targetFocus[1] - currentFocus[1]) * .12];
-            const idleHero = !motionReduced && currentProgress < .38;
-            const resized = width !== lastWidth || height !== lastHeight;
-            lastWidth = width; lastHeight = height;
-            if (Math.abs(previous - currentProgress) > .0001 || focusMoving || idleHero || resized || lastRouteStep < 0) {
-              const camera = cameraAt(currentProgress);
-              const drift = idleHero ? Math.sin(time / 12500) * .00012 : 0;
-              const side = width * Math.abs(camera.bias);
-              map.jumpTo({
-                center: [camera.center[0] + currentFocus[0] + drift, camera.center[1] + currentFocus[1]], zoom: camera.zoom - (isMobile ? .55 : 0),
-                bearing: camera.bearing + (idleHero ? Math.sin(time / 18000) * 1.5 : 0),
-                pitch: isMobile ? Math.min(52, camera.pitch) : camera.pitch,
-                padding: isMobile ? { top: 0, bottom: Math.round(height * .23), left: 0, right: 0 }
-                  : { top: 0, bottom: 0, left: camera.bias > 0 ? Math.round(side) : 0, right: camera.bias < 0 ? Math.round(side) : 0 },
-                retainPadding: false,
-              });
-              if (containerRef.current) {
-                const center = map.getCenter();
-                Object.assign(containerRef.current.dataset, {
-                  cameraLongitude: center.lng.toFixed(5), cameraLatitude: center.lat.toFixed(5),
-                  cameraZoom: map.getZoom().toFixed(3), cameraPitch: map.getPitch().toFixed(2), cameraBearing: map.getBearing().toFixed(2),
-                });
-              }
-            }
-            const step = Math.round(currentProgress * 24);
-            if (step !== lastRouteStep) {
-              (map.getSource("hostess-routes") as GeoJSONSource)?.setData(routeData(currentProgress)); lastRouteStep = step;
-              const network = Math.round(Math.max(0, Math.min(1, (currentProgress - 3.35) / .65)) * 20) / 20;
-              if (network !== lastNetwork) {
-                (map.getSource("hostess-network") as GeoJSONSource)?.setData(networkData(network));
-                map.setPaintProperty("hostess-network-light", "line-opacity", network * .88);
-                map.setPaintProperty("hostess-network-glow", "line-opacity", network * .24);
-                map.setPaintProperty("hostess-routes-light", "line-opacity", .9 - network * .51);
-                map.setPaintProperty("hostess-routes-glow", "line-opacity", .23 - network * .13);
-                map.setPaintProperty("hostess-district-fill", "fill-opacity", .028 + network * .025);
-                lastNetwork = network;
-              }
-              updateMarkers();
-            }
-          };
-          frame = window.requestAnimationFrame(animate);
-        });
-      } catch {
-        if (!disposed) setStatus("offline");
+    const requestDraw = () => {
+      if (!disposed && !frame && document.visibilityState !== 'hidden') frame = requestAnimationFrame(draw);
+    };
+    const updateMarkers = (p: number) => {
+      const selected = latestRef.current.selectedVenue;
+      const network = p >= 3.4 && p < 5.4;
+      const mode = `${selected}/${network}`;
+      if (markerMode === mode) return;
+      markerMode = mode;
+      markers.forEach(marker => {
+        const el = marker.getElement();
+        el.dataset.selected = String(el.dataset.venue === selected);
+        el.dataset.network = String(network);
+        el.setAttribute('aria-pressed', el.dataset.selected);
+        el.setAttribute('role', 'button');
+      });
+      if (map?.getSource('hostess-places')) VENUES.forEach((venue,index) => map!.setFeatureState({source:'hostess-places',id:index}, {active:venue.id===selected,network}));
+    };
+    const updateLines = (p: number) => {
+      if (!map || !loaded) return;
+      const route = Math.round(Math.max(0, Math.min(1, (p - .35) / 1.65)) * 32) / 32;
+      const network = Math.round(Math.max(0, Math.min(1, (p - 3.35) / .65)) * 28) / 28;
+      if (route !== routeReveal) {
+        map.setPaintProperty('hostess-routes-light','line-gradient',revealGradient(route,'#f5c792'));
+        map.setPaintProperty('hostess-routes-glow','line-gradient',revealGradient(route,'#e9ac60'));
+        routeReveal = route;
+      }
+      if (network !== networkReveal) {
+        map.setPaintProperty('hostess-network-light','line-gradient',revealGradient(network,'#a0c5ff'));
+        map.setPaintProperty('hostess-network-glow','line-gradient',revealGradient(network,'#729bef'));
+        map.setPaintProperty('hostess-network-light','line-opacity',network > 0 ? .86 : 0);
+        map.setPaintProperty('hostess-network-glow','line-opacity',network > 0 ? .20 : 0);
+        map.setPaintProperty('hostess-routes-light','line-opacity',.9-network*.5);
+        map.setPaintProperty('hostess-routes-glow','line-opacity',.19-network*.10);
+        networkReveal = network;
       }
     };
-    initialise();
-    return () => {
-      disposed = true; window.cancelAnimationFrame(frame); window.clearTimeout(timeout);
-      markersRef.current.forEach(marker => marker.remove()); markersRef.current = [];
-      mapRef.current?.remove(); mapRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    markersRef.current.forEach(marker => {
-      const el = marker.getElement(); el.dataset.selected = String(el.dataset.venue === selectedVenue);
-      el.setAttribute('aria-pressed', el.dataset.selected);
-      el.setAttribute('role', 'button');
+    function draw(time: number) {
+      frame = 0;
+      if (disposed || document.visibilityState === 'hidden') return;
+      const state = motion.current;
+      const p = state.paused ? state.activeChapter : state.progress;
+      const desiredFocus = selectionOffset(p,latestRef.current.selectedVenue);
+      const dt = Math.min(64,Math.max(1,time-lastTime || 16.7));
+      const alpha = state.paused ? 1 : 1-Math.exp(-dt/110);
+      focus = [focus[0]+(desiredFocus[0]-focus[0])*alpha,focus[1]+(desiredFocus[1]-focus[1])*alpha];
+      const focusing = Math.abs(focus[0]-desiredFocus[0])+Math.abs(focus[1]-desiredFocus[1])>.0000004;
+      lastTime = time;
+      const camera = cameraAt(p);
+      if (rootRef.current && chapter !== state.activeChapter) {
+        rootRef.current.dataset.cameraChapter = String(state.activeChapter);
+        chapter = state.activeChapter;
+      }
+      if (!loaded && fallbackRef.current) {
+        const scale = Math.max(.88,Math.min(1.75,1+(camera.zoom-CAMERA_STOPS[0].zoom)*.27));
+        fallbackRef.current.style.transform = `scale(${scale}) rotate(${(camera.bearing-CAMERA_STOPS[0].bearing)*.12}deg) translate(${(camera.bias-.4)*12-focus[0]*450}%,${focus[1]*700}%)`;
+      }
+      if (map && loaded) {
+        const mobile = window.innerWidth < 768;
+        const zoom = camera.zoom - (mobile ? .25 : 0) - Math.log2(renderScale);
+        const signature = `${p.toFixed(5)}/${focus[0].toFixed(7)}/${focus[1].toFixed(7)}/${size.width}/${size.height}`;
+        if (signature !== lastCamera) {
+          const side = size.width*Math.abs(camera.bias);
+          map.jumpTo({
+            center:[camera.center[0]+focus[0],camera.center[1]+focus[1]],
+            zoom:mobile && p < 3.2 ? Math.max(15.05,zoom) : zoom,bearing:camera.bearing,pitch:mobile?Math.min(50,camera.pitch):camera.pitch,
+            padding:mobile?{top:0,bottom:Math.round(size.height*.18),left:0,right:0}:{top:0,bottom:0,left:camera.bias>0?Math.round(side):0,right:camera.bias<0?Math.round(side):0},
+            retainPadding:false,
+          });
+          lastCamera=signature;
+          cameraFrames++;
+          if (benchmark && containerRef.current) {
+            containerRef.current.dataset.cameraFrames=String(cameraFrames);
+          }
+        }
+        updateLines(p);
+        updateMarkers(p);
+        // Diagnostic attributes update once when the camera settles, not every frame.
+        if (!focusing && containerRef.current) {
+          const data = containerRef.current.dataset;
+          const zoom = map.getZoom().toFixed(3);
+          if (data.cameraZoom !== zoom && (state.paused || Math.abs(p-Math.round(p))<.002)) {
+            const center=map.getCenter();
+            Object.assign(data,{cameraLongitude:center.lng.toFixed(5),cameraLatitude:center.lat.toFixed(5),cameraZoom:zoom,cameraPitch:map.getPitch().toFixed(2),cameraBearing:map.getBearing().toFixed(2)});
+          }
+        }
+        if (lastSelected !== latestRef.current.selectedVenue) { lastSelected=latestRef.current.selectedVenue; updateMarkers(p); }
+      }
+      if (focusing) requestDraw();
+    }
+    scheduler.current = requestDraw;
+    const unregister = registerRenderer(requestDraw);
+    const resize=new ResizeObserver(entries=>{
+      const box=entries[0].contentRect;
+      size={width:box.width,height:box.height};
+      map?.resize();lastCamera='';requestDraw();
     });
-  }, [selectedVenue]);
+    if (containerRef.current) resize.observe(containerRef.current);
+    const visible=()=>{if(document.visibilityState==='visible')requestDraw();};
+    document.addEventListener('visibilitychange',visible);
+    requestDraw();
 
-  const fallbackCamera = cameraAt(reduced || motionPaused ? activeChapter : progress);
-  const fallbackScale = Math.max(.88, Math.min(1.75, 1 + (fallbackCamera.zoom - CAMERA_STOPS[0].zoom) * .27));
-  const fallbackRotation = (fallbackCamera.bearing - CAMERA_STOPS[0].bearing) * .12;
-  const fallbackSelection = selectionOffset(reduced || motionPaused ? activeChapter : progress, selectedVenue);
-  return <div className="city-map" data-map-status={status} data-camera-chapter={activeChapter}>
-    <div className="city-map__fallback" style={{ transform: `scale(${fallbackScale}) rotate(${fallbackRotation}deg) translate(${(fallbackCamera.bias - .4) * 12 - fallbackSelection[0] * 450}%, ${fallbackSelection[1] * 700}%)` }}>
-      <CityDrawing />
-    </div>
-    <div className="city-map__canvas" ref={containerRef} inert={status !== 'ready'} aria-hidden={status !== 'ready'} />
-    {status !== "ready" && VENUES.map((venue, index) => <button type="button" key={venue.id}
-      className="city-venue-marker city-fallback-marker" data-selected={selectedVenue === venue.id}
-      aria-pressed={selectedVenue === venue.id}
-      style={{ left: `${FALLBACK_POINTS[index].x}%`, top: `${FALLBACK_POINTS[index].y}%` }}
-      onClick={() => onVenueSelect(venue.id)} aria-label={`Explore ${venue.name}, ${venue.category}`}>
-      <span className="city-venue-marker__dot"/><span className="city-venue-marker__stem"/>
-      <span className="city-venue-marker__label"><b>{venue.name}</b><small>{venue.category}</small></span>
-    </button>)}
-    <div className="city-map__haze"/><div className="city-map__grain"/>
-    {status === "offline" && <div className="city-map__notice"><span>City preview</span> · Live map unavailable</div>}
+    (async()=>{
+      if(!token||params.get('city')==='illustrated'){setStatus('offline');return;}
+      try{
+        const mapbox=(await import('mapbox-gl')).default;
+        if(disposed)return;
+        if(!mapbox.supported()){setStatus('offline');return;}
+        const initial=cameraAt(motion.current.progress);
+        map=new mapbox.Map({container:containerRef.current!,accessToken:token,style:'mapbox://styles/mapbox/dark-v11',center:initial.center,zoom:initial.zoom-Math.log2(renderScale),pitch:initial.pitch,bearing:initial.bearing,interactive:false,attributionControl:false,antialias:false,trackResize:false,maxTileCacheSize:initialMobile?100:240,fadeDuration:0,logoPosition:'bottom-left',renderWorldCopies:false,localFontFamily:'Manrope',collectResourceTiming:false,performanceMetricsCollection:false,locale:{'AttributionControl.ToggleAttribution':'Информация о карте'}});
+        map.addControl(new mapbox.AttributionControl({compact:true}),'bottom-right');
+        let failures=0;
+        const offline=()=>{if(!disposed){loaded=false;setStatus('offline');requestDraw();}};
+        timeout=window.setTimeout(()=>{if(!loaded)offline();},18000);
+        map.on('error',event=>{const msg=event.error?.message||'';if(/401|403|access token|Unauthorized|Forbidden/i.test(msg)||++failures>8)offline();});
+        const canvas=map.getCanvas();canvas.setAttribute('aria-label','Объёмная карта Манхэттена с демонстрационными заведениями Hostess');canvas.setAttribute('role','img');
+        const lost=(event:Event)=>{event.preventDefault();offline();};
+        canvas.addEventListener('webglcontextlost',lost);
+        canvas.addEventListener('webglcontextrestored',()=>{if(!disposed){loaded=true;setStatus('ready');requestDraw();}});
+        map.once('load',()=>{
+          if(disposed||!map)return;
+          clearTimeout(timeout);
+          try{installCityLayers(map,initialMobile);}catch{offline();return;}
+          VENUES.forEach(venue=>markers.push(new mapbox.Marker({element:markerElement(venue,id=>latestRef.current.onVenueSelect(id)),anchor:'center',pitchAlignment:'viewport',rotationAlignment:'viewport',occludedOpacity:.75}).setLngLat(venue.coordinates).addTo(map!)));
+          loaded=true;setStatus('ready');updateMarkers(motion.current.progress);requestDraw();
+        });
+      }catch{if(!disposed)setStatus('offline');}
+    })();
+    return()=>{
+      disposed=true;cancelAnimationFrame(frame);clearTimeout(timeout);resize.disconnect();
+      document.removeEventListener('visibilitychange',visible);
+      unregister();
+      markers.forEach(marker=>marker.remove());map?.remove();
+    };
+  },[motion, registerRenderer]);
+
+  return <div className="city-map" ref={rootRef} data-map-status={status} data-camera-chapter="0">
+    {(status!=='ready'||fallbackLeaving)&&<div className="city-map__fallback" ref={fallbackRef}><CityDrawing/></div>}
+    <div className="city-map__canvas" ref={containerRef} inert={status!=='ready'} aria-hidden={status!=='ready'}/>
+    {status!=='ready'&&VENUES.map((venue,index)=><button type="button" key={venue.id} className="city-venue-marker city-fallback-marker" data-selected={selectedVenue===venue.id} aria-pressed={selectedVenue===venue.id} style={{left:`${FALLBACK_POINTS[index].x}%`,top:`${FALLBACK_POINTS[index].y}%`}} onClick={()=>onVenueSelect(venue.id)} aria-label={`Выбрать ${venue.name}, ${venue.category}`}><span className="city-venue-marker__dot"/><span className="city-venue-marker__stem"/><span className="city-venue-marker__label"><b>{venue.name}</b><small>{venue.category}</small></span></button>)}
+    {status==='offline'&&<div className="city-map__notice"><span>Иллюстрация города</span> · Карта временно недоступна</div>}
   </div>;
 }

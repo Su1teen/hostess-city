@@ -4,12 +4,12 @@ import '../components/city-map.css';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Hostess — The city is yours.',
-  description: 'A table worth finding. A night worth staying for. Discover a connected city of dining, drinks and rewards with Hostess.',
+  title: 'Hostess — ваш вечер в городе',
+  description: 'Выбирайте рестораны и бары, бронируйте столики, оформляйте предзаказы и используйте бонусы в сети заведений Hostess.',
   metadataBase: new URL('https://hostess-city-oct14.welldog16.chatgpt.site'),
-  openGraph: { title: 'Hostess — The city is yours.', description: 'One city. One Hostess. A new way to go out.' },
+  openGraph: { title: 'Hostess — ваш вечер в городе', description: 'Рестораны, бронирования, предзаказы и общие бонусы — в одном сервисе.' },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="ru"><body>{children}</body></html>;
 }

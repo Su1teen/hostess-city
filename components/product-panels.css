@@ -1,5 +1,14 @@
 .hm-dialog-about{max-width:590px!important}.hm-about{padding:36px 42px}.hm-about h2{font-size:60px;line-height:1.05;letter-spacing:-.06em;margin:20px 0 25px}.hm-about h2 em{color:#e2ad6c}.hm-about>p:not(.hp-eyebrow){font-size:13px;line-height:1.9;color:#9eacb7;margin:20px 0}.hm-about .hp-action{margin:28px 0 0;width:100%}
 @media(max-width:600px){.hm-about{padding:27px 22px}.hm-about h2{font-size:46px}}
+.hp-panel em,.hm-dialog em{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500}
+.hp-panel-top{font-size:10px;line-height:1.5}.hp-live-label{font-size:7px;letter-spacing:.035em}.hp-panel h3{letter-spacing:-.04em}
+.hp-booking-scene{perspective:600px}
+.hp-table-orbit{width:140px;height:140px;transform:rotateX(57deg) rotateZ(-22deg);background:linear-gradient(135deg,#73552b40,#162432 55%,#2c3540);box-shadow:0 9px 0 #0a111b,0 10px 0 #876b4444,0 23px 35px #0008}
+.hp-table-seat{box-shadow:0 5px 0 #0a111b,0 10px 10px #0005}
+.hp-pass-balance strong em{font-size:15px!important;letter-spacing:0}
+.hp-connection-line span{font-size:8px}
+.hp-panel-footer{line-height:1.7}
+@media(max-width:600px){.hp-panel-top{padding:15px 17px}.hp-panel-top>span:nth-child(2){max-width:145px}.hp-live-label{font-size:6px}.hp-venue-detail{font-size:10px}.hp-filter{gap:4px}.hp-filter button{padding:0 10px}.hm-guest-copy h2{font-size:42px}.hp-confirm-disclaimer{font-size:11px!important}}
 .hp-panel {
   --hp-cream: #f2eee5;
   --hp-muted: #919da7;
@@ -288,3 +297,10 @@
   .hp-panel *, .hm-dialog * { transition: none !important; }
   .hm-overlay { animation: none; }
 }
+
+.hp-panel em,.hm-dialog em{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500}
+.hp-table-orbit{width:140px;height:140px;transform:rotateX(57deg) rotateZ(-22deg);background:linear-gradient(135deg,#73552b40,#162432 55%,#2c3540);box-shadow:0 9px 0 #0a111b,0 10px 0 #876b4444,0 23px 35px #0008}
+.hp-table-seat{box-shadow:0 5px 0 #0a111b,0 10px 10px #0005}
+.hp-panel-top{font-size:10px;line-height:1.5}.hp-live-label{font-size:7px;letter-spacing:.035em}
+.hp-pass-balance strong em{font-size:15px!important;letter-spacing:0}
+@media(max-width:600px){.hp-panel-top{padding:15px 17px}.hp-panel-top>span:nth-child(2){max-width:145px}.hp-live-label{font-size:6px}.hp-venue-detail{font-size:10px}.hp-filter{gap:4px}.hp-filter button{padding:0 10px}}
