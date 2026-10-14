@@ -28,6 +28,17 @@ export default function HostessExperience() {
   const [motionOff, setMotionOff] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+    const initialChapter = window.location.hash.slice(1);
+    document.fonts.ready.then(() => {
+      if (!mounted) return;
+      ScrollTrigger.refresh();
+      if (ids.includes(initialChapter)) document.getElementById(initialChapter)?.scrollIntoView({ behavior: 'instant' });
+    });
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
     const mm = gsap.matchMedia();
     mm.add({ motion: '(prefers-reduced-motion: no-preference)', reduced: '(prefers-reduced-motion: reduce)' }, (context) => {
@@ -71,6 +82,7 @@ export default function HostessExperience() {
 
   const go = (i: number) => {
     setMenu(false);
+    window.history.replaceState(null, '', `#${ids[i]}`);
     document.getElementById(ids[i])?.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth' });
   };
 
