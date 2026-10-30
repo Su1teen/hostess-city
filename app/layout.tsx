@@ -1,14 +1,21 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../components/city-map.css';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Hostess — ваш вечер в городе',
-  description: 'Выбирайте рестораны и бары, бронируйте столики, оформляйте предзаказы и используйте бонусы в сети заведений Hostess.',
-  metadataBase: new URL('https://hostess-city-oct14.welldog16.chatgpt.site'),
-  openGraph: { title: 'Hostess — ваш вечер в городе', description: 'Рестораны, бронирования, предзаказы и общие бонусы — в одном сервисе.' },
+  title: 'Hostess — рестораны, бары и ваш вечер в городе',
+  description: 'Hostess показывает живую загрузку заведений, бронирует конкретный стол и ведёт весь вечер в одном приложении. Для заведений — Command Center: зал, брони, AI-хостес в WhatsApp и аналитика.',
+  openGraph: {
+    title: 'Hostess — город после восьми',
+    description: 'Живая загрузка залов, бронь конкретного стола, консьерж и биржа напитков. Для заведений — Command Center.',
+    type: 'website',
+    locale: 'ru_RU',
+  },
+  icons: { icon: '/icon.svg' },
 };
+
+export const viewport: Viewport = { themeColor: '#070b11', colorScheme: 'dark' };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="ru"><body>{children}</body></html>;

@@ -6,14 +6,16 @@
     "dev": "next dev --webpack --hostname 127.0.0.1 --port 3000",
     "build": "next build --webpack",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "serve out --no-clipboard -l tcp://0.0.0.0:${PORT:-3000}"
   },
   "dependencies": {
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "mapbox-gl": "^3.16.0",
-    "gsap": "^3.14.0"
+    "gsap": "^3.14.0",
+    "serve": "^14.2.4"
   },
   "devDependencies": {
     "typescript": "^5.9.0",
@@ -24,5 +26,8 @@
     "@tailwindcss/postcss": "^4.1.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.0.0"
+  },
+  "engines": {
+    "node": ">=20.9"
   }
 }
