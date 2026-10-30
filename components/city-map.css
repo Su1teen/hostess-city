@@ -1,5 +1,11 @@
 .city-map { position: fixed; inset: 0; overflow: hidden; background: #0b1120; pointer-events: none; }
-.city-map__canvas { position: absolute; inset: 0; opacity: 0; transition: opacity 1.6s ease; }
+.city-map__canvas { position: absolute; top: 0; left: 0; opacity: 0; transition: opacity 1.6s ease;
+  /* Rendered at 1/scale and stretched back: the GPU fills far fewer pixels. */
+  width: calc(100% / var(--map-scale, 1)); height: calc(100% / var(--map-scale, 1));
+  transform: scale(var(--map-scale, 1)); transform-origin: 0 0; }
+.city-map__canvas .mapboxgl-ctrl-bottom-left, .city-map__canvas .mapboxgl-ctrl-bottom-right { scale: calc(1 / var(--map-scale, 1)); }
+.city-map__canvas .mapboxgl-ctrl-bottom-left { transform-origin: bottom left; }
+.city-map__canvas .mapboxgl-ctrl-bottom-right { transform-origin: bottom right; }
 .city-map[data-map-status="ready"] .city-map__canvas { opacity: 1; }
 .city-map__fallback { position: absolute; inset: 0; transition: opacity 1.6s ease;
   background:
@@ -15,11 +21,13 @@
 .city-map .mapboxgl-ctrl-attrib a { color: inherit; }
 
 /* Venue pins */
-.map-pin { display: flex; flex-direction: column; align-items: center; font-family: Manrope, Arial, sans-serif; }
-.map-pin > * { transition: opacity .6s ease; }
+.map-pin { font-family: Manrope, Arial, sans-serif; }
+/* Counter the canvas stretch so pins keep their CSS size. */
+.map-pin__ui { display: flex; flex-direction: column; align-items: center; transform: scale(calc(1 / var(--map-scale, 1))); transform-origin: 50% 100%; }
+.map-pin__ui > * { transition: opacity .6s ease; }
 /* Mapbox owns the marker root's inline opacity (occlusion), so states fade the children. */
-.map-pin[data-state="hidden"] > * { opacity: 0 !important; }
-.map-pin__card { display: grid; gap: 3px; padding: 9px 13px 10px; min-width: 120px; text-align: center; white-space: nowrap; border-radius: 12px; background: rgba(8, 12, 19, .9); border: 1px solid rgba(230, 176, 107, .3); box-shadow: 0 14px 30px rgba(0, 0, 0, .45); backdrop-filter: blur(8px); transform-origin: bottom center; transition: transform .5s cubic-bezier(.2, .8, .2, 1), opacity .4s, border-color .4s; }
+.map-pin[data-state="hidden"] .map-pin__ui > * { opacity: 0 !important; }
+.map-pin__card { display: grid; gap: 3px; padding: 9px 13px 10px; min-width: 120px; text-align: center; white-space: nowrap; border-radius: 12px; background: rgba(8, 12, 19, .94); border: 1px solid rgba(230, 176, 107, .3); box-shadow: 0 14px 30px rgba(0, 0, 0, .45); transform-origin: bottom center; transition: transform .5s cubic-bezier(.2, .8, .2, 1), opacity .4s, border-color .4s; }
 .map-pin__card b { font-size: 13px; font-weight: 600; color: #f2eee6; letter-spacing: -.01em; }
 .map-pin__card small { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: #8f99a3; }
 .map-pin__card i { font-style: normal; font-size: 11px; color: #f2c27e; }
@@ -44,9 +52,10 @@
 
 /* The moving head of the route */
 .map-head { width: 34px; height: 34px; display: grid; place-items: center; }
-.map-head span { transition: opacity .4s; }
-.map-head.is-hidden span { opacity: 0; }
-.map-head span { width: 12px; height: 12px; border-radius: 50%; background: #fff6e6; box-shadow: 0 0 0 5px rgba(242, 194, 126, .35), 0 0 30px 8px rgba(242, 194, 126, .75); }
+.map-head .map-pin__ui { transform-origin: 50% 50%; }
+.map-head .map-pin__ui > span { transition: opacity .4s; }
+.map-head.is-hidden .map-pin__ui > span { opacity: 0; }
+.map-head .map-pin__ui > span { width: 12px; height: 12px; border-radius: 50%; background: #fff6e6; box-shadow: 0 0 0 5px rgba(242, 194, 126, .35), 0 0 30px 8px rgba(242, 194, 126, .75); }
 
 @media (max-width: 1024px) {
   .map-pin__card { min-width: 0; padding: 6px 9px; border-radius: 9px; }

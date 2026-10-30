@@ -9,49 +9,63 @@ import type { ScrollStateRef } from "../lib/scroll-state";
 type Props = { motion: ScrollStateRef; registerRenderer: (draw: () => void) => () => void };
 type MapStatus = "loading" | "ready" | "offline";
 
+/** Lines are drawn once; the reveal is a cheap trim uniform instead of a new gradient texture. */
+const solid = (color: string): ExpressionSpecification => ["interpolate", ["linear"], ["line-progress"], 0, color, 1, color];
+const trim = (fraction: number): [number, number] => [Math.min(1, Math.max(0, fraction)), 1];
 const GOLD = "#f2c27e";
-const CLEAR = "rgba(0,0,0,0)";
 
-/** Reveals a line up to `fraction` of its length (line-progress is distance based). */
-function reveal(fraction: number, color: string): ExpressionSpecification {
-  if (fraction >= .999) return ["interpolate", ["linear"], ["line-progress"], 0, color, 1, color];
-  if (fraction <= .001) return ["interpolate", ["linear"], ["line-progress"], 0, CLEAR, 1, CLEAR];
-  return ["step", ["line-progress"], color, fraction, CLEAR];
-}
+/**
+ * Pixels rendered per CSS pixel. The map is a dimmed backdrop, so it can run well
+ * below retina density; each step down is taken only if frames are slow.
+ */
+const QUALITY = { desktop: [.9, .72, .58], mobile: [1, .8, .64] };
 
 function line(coordinates: number[][]) {
   return { type: "Feature" as const, properties: {}, geometry: { type: "LineString" as const, coordinates } };
 }
 
-function installLayers(map: MapboxMap, mobile: boolean) {
+const WIDTHS = (mobile: boolean): Record<string, number> => ({
+  "route-ghost": mobile ? 1.2 : 1.6, "route-glow": mobile ? 12 : 16, "route-core": mobile ? 2.6 : 3.2,
+  "network-glow": 9, "network-core": 1.5,
+});
+const BLURS = (mobile: boolean): Record<string, number> => ({ "route-glow": mobile ? 7 : 9, "network-glow": 6 });
+
+function fitToScale(map: MapboxMap, mobile: boolean, scale: number) {
+  Object.entries(WIDTHS(mobile)).forEach(([id, w]) => map.setPaintProperty(id, "line-width", w / scale));
+  Object.entries(BLURS(mobile)).forEach(([id, b]) => map.setPaintProperty(id, "line-blur", b / scale));
+}
+
+function installLayers(map: MapboxMap, mobile: boolean, scale: number) {
   map.addSource("hostess-route", { type: "geojson", lineMetrics: true, data: line(EVENING_ROUTE) });
   map.addSource("hostess-network", {
     type: "geojson", lineMetrics: true,
     data: { type: "FeatureCollection", features: networkLines().map(line) },
   });
   const top = { slot: "top" as const };
+  const hidden = trim(0);
   map.addLayer({ ...top, id: "route-ghost", type: "line", source: "hostess-route",
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#f2c27e", "line-opacity": .32, "line-width": mobile ? 1.2 : 1.6, "line-dasharray": [1.2, 2.4], "line-emissive-strength": 1 } });
+    paint: { "line-color": GOLD, "line-opacity": .32, "line-width": mobile ? 1.2 : 1.6, "line-dasharray": [1.2, 2.4], "line-emissive-strength": 1 } });
   map.addLayer({ ...top, id: "route-glow", type: "line", source: "hostess-route",
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-gradient": reveal(0, GOLD), "line-width": mobile ? 12 : 18, "line-blur": mobile ? 7 : 10, "line-opacity": .55, "line-emissive-strength": 1 } });
+    paint: { "line-gradient": solid(GOLD), "line-trim-offset": hidden, "line-width": mobile ? 12 : 16, "line-blur": mobile ? 7 : 9, "line-opacity": .55, "line-emissive-strength": 1 } });
   map.addLayer({ ...top, id: "route-core", type: "line", source: "hostess-route",
     layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-gradient": reveal(0, "#fff1d8"), "line-width": mobile ? 2.6 : 3.4, "line-emissive-strength": 1 } });
+    paint: { "line-gradient": solid("#fff1d8"), "line-trim-offset": hidden, "line-width": mobile ? 2.6 : 3.2, "line-emissive-strength": 1 } });
   map.addLayer({ ...top, id: "network-glow", type: "line", source: "hostess-network",
     layout: { "line-cap": "round" },
-    paint: { "line-gradient": reveal(0, "#9dbbff"), "line-width": 9, "line-blur": 6, "line-opacity": .4, "line-emissive-strength": 1 } });
+    paint: { "line-gradient": solid("#9dbbff"), "line-trim-offset": hidden, "line-width": 9, "line-blur": 6, "line-opacity": .4, "line-emissive-strength": 1 } });
   map.addLayer({ ...top, id: "network-core", type: "line", source: "hostess-network",
     layout: { "line-cap": "round" },
-    paint: { "line-gradient": reveal(0, "#cfe0ff"), "line-width": 1.5, "line-opacity": .9, "line-emissive-strength": 1 } });
+    paint: { "line-gradient": solid("#cfe0ff"), "line-trim-offset": hidden, "line-width": 1.5, "line-opacity": .9, "line-emissive-strength": 1 } });
+  fitToScale(map, mobile, scale);
 }
 
 function venueMarker(name: string, kind: string, note: string, id: string) {
   const el = document.createElement("div");
   el.className = "map-pin";
   el.dataset.venue = id;
-  el.innerHTML = `<span class="map-pin__card"><b></b><small></small><i></i></span><span class="map-pin__stem"></span><span class="map-pin__dot"></span>`;
+  el.innerHTML = `<span class="map-pin__ui"><span class="map-pin__card"><b></b><small></small><i></i></span><span class="map-pin__stem"></span><span class="map-pin__dot"></span></span>`;
   el.querySelector("b")!.textContent = name;
   el.querySelector("small")!.textContent = kind;
   el.querySelector("i")!.textContent = note;
@@ -60,6 +74,7 @@ function venueMarker(name: string, kind: string, note: string, id: string) {
 
 export default function CityMap({ motion, registerRenderer }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapStatus>("loading");
 
   useEffect(() => {
@@ -67,42 +82,66 @@ export default function CityMap({ motion, registerRenderer }: Props) {
     let lastSignature = "", lastRoute = -1, lastNetwork = -1, lastChapter = -1;
     const markers: Marker[] = [];
     let head: Marker | null = null;
+    const levels = window.innerWidth < 900 ? QUALITY.mobile : QUALITY.desktop;
+    let level = 0, lastFrame = 0, scale = 1;
+    const frameTimes: number[] = [];
+    // The canvas is laid out at 1/scale of the viewport and stretched back with CSS.
+    const applyQuality = () => {
+      scale = Math.max(1, (window.devicePixelRatio || 1) / levels[level]);
+      rootRef.current?.style.setProperty("--map-scale", scale.toFixed(3));
+      lastSignature = "";
+      map?.resize();
+      if (map && loaded) fitToScale(map, window.innerWidth < 900, scale);
+    };
+    applyQuality();
     const params = new URLSearchParams(window.location.search);
 
-    const draw = () => {
+    const draw = (time: number) => {
       frame = 0;
       if (disposed || !map || !loaded) return;
       const state = motion.current;
       const p = state.paused ? state.activeChapter : state.progress;
       const camera = cameraAt(p);
-      const width = window.innerWidth, mobile = width < 900;
-      const signature = `${p.toFixed(4)}/${width}/${window.innerHeight}`;
+      const container = map.getContainer();
+      const width = container.clientWidth, height = container.clientHeight, mobile = window.innerWidth < 900;
+      const signature = `${p.toFixed(4)}/${width}/${height}`;
       if (signature !== lastSignature) {
         lastSignature = signature;
+        // Drop resolution a step when the camera is moving and frames run long.
+        if (lastFrame && time - lastFrame < 200) {
+          frameTimes.push(time - lastFrame);
+          if (frameTimes.length >= 45) {
+            const sorted = [...frameTimes].sort((x, y) => x - y);
+            frameTimes.length = 0;
+            if (sorted[Math.floor(sorted.length / 2)] > 24 && level < levels.length - 1) { level++; applyQuality(); }
+          }
+        }
+        lastFrame = time;
         map.jumpTo({
           center: camera.center,
-          zoom: camera.zoom - (mobile ? .55 : 0),
+          // A canvas laid out 1/scale smaller shows the same area one log2(scale) zoom lower.
+          zoom: camera.zoom - (mobile ? .55 : 0) - Math.log2(scale),
           pitch: mobile ? Math.min(58, camera.pitch) : camera.pitch,
           bearing: camera.bearing,
           // Keep the route head in the open middle band between the copy and the device.
           padding: mobile
-            ? { top: Math.round(window.innerHeight * .1), bottom: 0, left: 0, right: 0 }
-            : { top: 0, bottom: Math.round(window.innerHeight * .08), left: Math.round(width * .06), right: 0 },
+            ? { top: Math.round(height * .1), bottom: 0, left: 0, right: 0 }
+            : { top: 0, bottom: Math.round(height * .08), left: Math.round(width * .06), right: 0 },
         });
         head?.setLngLat(camera.head);
       }
       const route = Math.round(camera.route * 600) / 600;
       if (route !== lastRoute) {
         lastRoute = route;
-        map.setPaintProperty("route-core", "line-gradient", reveal(route, "#fff1d8"));
-        map.setPaintProperty("route-glow", "line-gradient", reveal(route, GOLD));
+        map.setPaintProperty("route-core", "line-trim-offset", trim(route));
+        map.setPaintProperty("route-glow", "line-trim-offset", trim(route));
         head?.getElement().classList.toggle("is-hidden", route <= .002);
       }
       const network = Math.round(camera.network * 120) / 120;
       if (network !== lastNetwork) {
         lastNetwork = network;
-        map.setPaintProperty("network-core", "line-gradient", reveal(network, "#cfe0ff"));
-        map.setPaintProperty("network-glow", "line-gradient", reveal(network, "#9dbbff"));
+        map.setPaintProperty("network-core", "line-trim-offset", trim(network));
+        map.setPaintProperty("network-glow", "line-trim-offset", trim(network));
         map.setPaintProperty("route-ghost", "line-opacity", .32 * (1 - network));
       }
       const chapter = Math.round(p);
@@ -148,11 +187,13 @@ export default function CityMap({ motion, registerRenderer }: Props) {
           config: { basemap: {
             lightPreset: "night", theme: "default",
             showPointOfInterestLabels: false, showTransitLabels: false, showRoadLabels: false,
-            showPlaceLabels: true, show3dObjects: true,
+            showPlaceLabels: true, show3dObjects: true, show3dBuildings: true, show3dLandmarks: true,
+            // Thousands of instanced tree models and footpaths cost frames and add nothing at night.
+            show3dTrees: false, show3dFacades: false, showPedestrianRoads: false, showAdminBoundaries: false,
           } },
           language: "ru",
-          center: initial.center, zoom: initial.zoom, pitch: initial.pitch, bearing: initial.bearing,
-          interactive: false, attributionControl: false, antialias: !mobile,
+          center: initial.center, zoom: initial.zoom - Math.log2(scale), pitch: initial.pitch, bearing: initial.bearing,
+          interactive: false, attributionControl: false, antialias: false,
           fadeDuration: 0, renderWorldCopies: false, maxTileCacheSize: mobile ? 120 : 260,
           performanceMetricsCollection: false,
         });
@@ -171,7 +212,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
         map.on("style.load", () => {
           if (disposed || !map) return;
           clearTimeout(timeout);
-          try { installLayers(map, mobile); } catch { offline(); return; }
+          try { installLayers(map, mobile, scale); } catch { offline(); return; }
           const pin = (el: HTMLElement, at: [number, number]) =>
             markers.push(new mapbox.Marker({ element: el, anchor: "bottom", pitchAlignment: "viewport", rotationAlignment: "viewport" }).setLngLat(at).addTo(map!));
           const start = venueMarker("Вы здесь", "Юнион-сквер", "19:40", "start");
@@ -180,7 +221,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
           VENUES.forEach(v => pin(venueMarker(v.name, v.kind, v.note, v.id), v.coordinates));
           const traveller = document.createElement("div");
           traveller.className = "map-head is-hidden";
-          traveller.innerHTML = "<span></span>";
+          traveller.innerHTML = '<span class="map-pin__ui"><span></span></span>';
           head = new mapbox.Marker({ element: traveller, anchor: "center", pitchAlignment: "map" }).setLngLat(START).addTo(map);
           loaded = true;
           setStatus("ready");
@@ -200,7 +241,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
     };
   }, [motion, registerRenderer]);
 
-  return <div className="city-map" data-map-status={status}>
+  return <div className="city-map" ref={rootRef} data-map-status={status}>
     <div className="city-map__canvas" ref={containerRef} aria-hidden={status !== "ready"} />
     <div className="city-map__fallback" aria-hidden="true" />
   </div>;
