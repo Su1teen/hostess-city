@@ -15,27 +15,17 @@ const trim = (fraction: number): [number, number] => [Math.min(1, Math.max(0, fr
 const GOLD = "#f2c27e";
 
 /**
- * Pixels rendered per CSS pixel. The map is a dimmed backdrop, so it can run well
- * below retina density; each step down is taken only if frames are slow.
+ * Pixels the map renders per CSS pixel. Retina density costs 4x the fill of 1x
+ * for a dimmed backdrop, so the map runs a little below it and steps down only
+ * if frames stay slow. Zoom never changes, so 3D buildings always load.
  */
-const QUALITY = { desktop: [.9, .72, .58], mobile: [1, .8, .64] };
+const QUALITY = { desktop: [1.5, 1.25, 1], mobile: [1.5, 1.25, 1] };
 
 function line(coordinates: number[][]) {
   return { type: "Feature" as const, properties: {}, geometry: { type: "LineString" as const, coordinates } };
 }
 
-const WIDTHS = (mobile: boolean): Record<string, number> => ({
-  "route-ghost": mobile ? 1.2 : 1.6, "route-glow": mobile ? 12 : 16, "route-core": mobile ? 2.6 : 3.2,
-  "network-glow": 9, "network-core": 1.5,
-});
-const BLURS = (mobile: boolean): Record<string, number> => ({ "route-glow": mobile ? 7 : 9, "network-glow": 6 });
-
-function fitToScale(map: MapboxMap, mobile: boolean, scale: number) {
-  Object.entries(WIDTHS(mobile)).forEach(([id, w]) => map.setPaintProperty(id, "line-width", w / scale));
-  Object.entries(BLURS(mobile)).forEach(([id, b]) => map.setPaintProperty(id, "line-blur", b / scale));
-}
-
-function installLayers(map: MapboxMap, mobile: boolean, scale: number) {
+function installLayers(map: MapboxMap, mobile: boolean) {
   map.addSource("hostess-route", { type: "geojson", lineMetrics: true, data: line(EVENING_ROUTE) });
   map.addSource("hostess-network", {
     type: "geojson", lineMetrics: true,
@@ -58,7 +48,6 @@ function installLayers(map: MapboxMap, mobile: boolean, scale: number) {
   map.addLayer({ ...top, id: "network-core", type: "line", source: "hostess-network",
     layout: { "line-cap": "round" },
     paint: { "line-gradient": solid("#cfe0ff"), "line-trim-offset": hidden, "line-width": 1.5, "line-opacity": .9, "line-emissive-strength": 1 } });
-  fitToScale(map, mobile, scale);
 }
 
 function venueMarker(name: string, kind: string, note: string, id: string) {
@@ -74,7 +63,6 @@ function venueMarker(name: string, kind: string, note: string, id: string) {
 
 export default function CityMap({ motion, registerRenderer }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<MapStatus>("loading");
 
   useEffect(() => {
@@ -83,15 +71,19 @@ export default function CityMap({ motion, registerRenderer }: Props) {
     const markers: Marker[] = [];
     let head: Marker | null = null;
     const levels = window.innerWidth < 900 ? QUALITY.mobile : QUALITY.desktop;
-    let level = 0, lastFrame = 0, scale = 1;
+    let level = 0, lastFrame = 0;
     const frameTimes: number[] = [];
-    // The canvas is laid out at 1/scale of the viewport and stretched back with CSS.
+    // Mapbox has no pixel-ratio option; it reads window.devicePixelRatio on every resize.
+    // Shadow it with the map's own density (the page keeps the real one for everything else).
+    const screenDpr = window.devicePixelRatio || 1;
+    let mapDpr = screenDpr;
+    const original = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
+    const ownsDpr = !original || original.configurable === true;
+    if (ownsDpr) Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => mapDpr });
     const applyQuality = () => {
-      scale = Math.max(1, (window.devicePixelRatio || 1) / levels[level]);
-      rootRef.current?.style.setProperty("--map-scale", scale.toFixed(3));
+      mapDpr = Math.min(screenDpr, levels[level]);
       lastSignature = "";
       map?.resize();
-      if (map && loaded) fitToScale(map, window.innerWidth < 900, scale);
     };
     applyQuality();
     const params = new URLSearchParams(window.location.search);
@@ -110,17 +102,16 @@ export default function CityMap({ motion, registerRenderer }: Props) {
         // Drop resolution a step when the camera is moving and frames run long.
         if (lastFrame && time - lastFrame < 200) {
           frameTimes.push(time - lastFrame);
-          if (frameTimes.length >= 45) {
+          if (frameTimes.length >= 90) {
             const sorted = [...frameTimes].sort((x, y) => x - y);
             frameTimes.length = 0;
-            if (sorted[Math.floor(sorted.length / 2)] > 24 && level < levels.length - 1) { level++; applyQuality(); }
+            if (sorted[Math.floor(sorted.length / 2)] > 30 && level < levels.length - 1) { level++; applyQuality(); }
           }
         }
         lastFrame = time;
         map.jumpTo({
           center: camera.center,
-          // A canvas laid out 1/scale smaller shows the same area one log2(scale) zoom lower.
-          zoom: camera.zoom - (mobile ? .55 : 0) - Math.log2(scale),
+          zoom: camera.zoom - (mobile ? .55 : 0),
           pitch: mobile ? Math.min(58, camera.pitch) : camera.pitch,
           bearing: camera.bearing,
           // Keep the route head in the open middle band between the copy and the device.
@@ -192,7 +183,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
             show3dTrees: false, show3dFacades: false, showPedestrianRoads: false, showAdminBoundaries: false,
           } },
           language: "ru",
-          center: initial.center, zoom: initial.zoom - Math.log2(scale), pitch: initial.pitch, bearing: initial.bearing,
+          center: initial.center, zoom: initial.zoom - (mobile ? .55 : 0), pitch: initial.pitch, bearing: initial.bearing,
           interactive: false, attributionControl: false, antialias: false,
           fadeDuration: 0, renderWorldCopies: false, maxTileCacheSize: mobile ? 120 : 260,
           performanceMetricsCollection: false,
@@ -212,7 +203,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
         map.on("style.load", () => {
           if (disposed || !map) return;
           clearTimeout(timeout);
-          try { installLayers(map, mobile, scale); } catch { offline(); return; }
+          try { installLayers(map, mobile); } catch { offline(); return; }
           const pin = (el: HTMLElement, at: [number, number]) =>
             markers.push(new mapbox.Marker({ element: el, anchor: "bottom", pitchAlignment: "viewport", rotationAlignment: "viewport" }).setLngLat(at).addTo(map!));
           const start = venueMarker("Вы здесь", "Юнион-сквер", "19:40", "start");
@@ -238,10 +229,14 @@ export default function CityMap({ motion, registerRenderer }: Props) {
       markers.forEach(marker => marker.remove());
       head?.remove();
       map?.remove();
+      if (ownsDpr) {
+        if (original) Object.defineProperty(window, "devicePixelRatio", original);
+        else delete (window as { devicePixelRatio?: number }).devicePixelRatio;
+      }
     };
   }, [motion, registerRenderer]);
 
-  return <div className="city-map" ref={rootRef} data-map-status={status}>
+  return <div className="city-map" data-map-status={status}>
     <div className="city-map__canvas" ref={containerRef} aria-hidden={status !== "ready"} />
     <div className="city-map__fallback" aria-hidden="true" />
   </div>;
