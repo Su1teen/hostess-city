@@ -67,8 +67,6 @@ export default function CityMap({ motion, registerRenderer }: Props) {
     let lastSignature = "", lastRoute = -1, lastNetwork = -1, lastChapter = -1;
     const markers: Marker[] = [];
     let head: Marker | null = null;
-    // Public (pk.) token, inlined at build time; restrict it to the site's URLs in Mapbox.
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
     const params = new URLSearchParams(window.location.search);
 
     const draw = () => {
@@ -130,7 +128,14 @@ export default function CityMap({ motion, registerRenderer }: Props) {
     window.addEventListener("resize", onResize);
 
     (async () => {
-      if (!token || params.get("city") === "off") { setStatus("offline"); return; }
+      if (params.get("city") === "off") { setStatus("offline"); return; }
+      // Public (pk.) token: inlined at build time, or written by scripts/start.mjs at runtime.
+      let token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+      if (!token) {
+        try { token = (await (await fetch("/runtime-config.json", { cache: "no-store" })).json()).mapboxToken; } catch { /* no runtime config */ }
+      }
+      if (disposed) return;
+      if (!token) { console.warn("Hostess: NEXT_PUBLIC_MAPBOX_TOKEN не задан — карта отключена"); setStatus("offline"); return; }
       try {
         const mapbox = (await import("mapbox-gl")).default;
         if (disposed) return;
@@ -138,7 +143,7 @@ export default function CityMap({ motion, registerRenderer }: Props) {
         const mobile = window.innerWidth < 900;
         const initial = cameraAt(motion.current.progress);
         map = new mapbox.Map({
-          container: containerRef.current!, accessToken: token,
+          container: containerRef.current!, accessToken: token!,
           style: "mapbox://styles/mapbox/standard",
           config: { basemap: {
             lightPreset: "night", theme: "default",

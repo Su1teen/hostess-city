@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "start": "serve out --no-clipboard -l tcp://0.0.0.0:${PORT:-3000}"
+    "start": "node scripts/start.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",
